@@ -1,0 +1,13 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: create_model
+display_name: create_model
+outputs:
+  model_output:
+    type: mlflow_model
+code: ./create.py
+command: python create.py --model_output ${{outputs.model_output}}
+environment:
+  conda_file: ./conda.yaml
+  image: mcr.microsoft.com/azureml/openmpi3.1.2-ubuntu18.04
