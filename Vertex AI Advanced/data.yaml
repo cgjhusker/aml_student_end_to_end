@@ -1,0 +1,42 @@
+name: Parse data
+outputs:
+- {name: dataset_train, type: Dataset}
+- {name: dataset_test, type: Dataset}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'keras' 'numpy' 'pyarrow' 'kfp==1.8.13' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing\
+      \ import *\n\ndef parse_data(\n    dataset_train: Output[Dataset],\n    dataset_test:\
+      \ Output[Dataset]\n):\n\n    import numpy as np\n    import tensorflow as tf\n\
+      \    from tensorflow.keras.utils import to_categorical\n\n    fashion_mnist\
+      \ = tf.keras.datasets.fashion_mnist\n    (train_images, train_labels), (test_images,\
+      \ test_labels) = fashion_mnist.load_data() \n\n    testX = test_images.reshape((test_images.shape[0],\
+      \ 28, 28, 1))\n    trainX = train_images.reshape((train_images.shape[0], 28,\
+      \ 28, 1))\n    test_images_scaled = testX / 255.0\n    train_images_scaled =\
+      \ trainX / 255.0\n    test_label_ohe = to_categorical(test_labels)\n    train_label_ohe\
+      \ = to_categorical(train_labels)\n\n\n    file1 = open(dataset_train.path +\
+      \ \".npy\", \"wb\")\n    # save array to the file\n    np.save(file1, train_images_scaled)\n\
+      \    # close the file\n    file1.close\n\n    file2 = open(dataset_test.path\
+      \ + \".npy\", \"wb\")\n    # save array to the file\n    np.save(file2, train_label_ohe)\n\
+      \    # close the file\n    file2.close\n\n"
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - parse_data

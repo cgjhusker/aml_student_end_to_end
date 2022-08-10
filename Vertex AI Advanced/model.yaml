@@ -1,0 +1,60 @@
+name: Train model
+inputs:
+- {name: dataset_x, type: Dataset}
+- {name: dataset_y, type: Dataset}
+implementation:
+  container:
+    image: python:3.9
+    command:
+    - sh
+    - -c
+    - |2
+
+      if ! [ -x "$(command -v pip)" ]; then
+          python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip
+      fi
+
+      PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'keras' 'numpy' 'kfp==1.8.13' && "$0" "$@"
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp -d)
+      printf "%s" "$0" > "$program_path/ephemeral_component.py"
+      python3 -m kfp.v2.components.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+    - |2+
+
+      import kfp
+      from kfp.v2 import dsl
+      from kfp.v2.dsl import *
+      from typing import *
+
+      def train_model(
+          dataset_x:  Input[Dataset],
+          dataset_y:  Input[Dataset],
+      ):
+
+          import numpy as np
+          from tensorflow.keras import layers, models
+
+          file1 = open(dataset_x.path + ".npy", "rb")
+          file2 = open(dataset_y.path + ".npy", "rb")
+          #read the file to numpy array
+          train_images_scaled = np.load(file1)
+          train_label_ohe = np.load(file2)
+
+          model = models.Sequential()
+          model.add(layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', input_shape=(28, 28, 1)))
+          model.add(layers.MaxPooling2D((2, 2)))
+          model.add(layers.Flatten())
+          model.add(layers.Dense(100, activation='relu', kernel_initializer='he_uniform'))
+          model.add(layers.Dense(10, activation='softmax'))
+
+          model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+          model.fit(train_images_scaled, train_label_ohe, validation_split=0.15, epochs=5)
+
+    args:
+    - --executor_input
+    - {executorInput: null}
+    - --function_to_execute
+    - train_model

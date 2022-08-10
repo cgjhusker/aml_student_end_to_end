@@ -1,0 +1,143 @@
+{
+  "pipelineSpec": {
+    "components": {
+      "comp-parse-data": {
+        "executorLabel": "exec-parse-data",
+        "outputDefinitions": {
+          "artifacts": {
+            "dataset_test": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "dataset_train": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
+      "comp-train-model": {
+        "executorLabel": "exec-train-model",
+        "inputDefinitions": {
+          "artifacts": {
+            "dataset_x": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "dataset_y": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      }
+    },
+    "deploymentSpec": {
+      "executors": {
+        "exec-parse-data": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "parse_data"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'keras' 'numpy' 'pyarrow' 'kfp==1.8.13' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef parse_data(\n    dataset_train: Output[Dataset],\n    dataset_test: Output[Dataset]\n):\n\n    import numpy as np\n    import tensorflow as tf\n    from tensorflow.keras.utils import to_categorical\n\n    fashion_mnist = tf.keras.datasets.fashion_mnist\n    (train_images, train_labels), (test_images, test_labels) = fashion_mnist.load_data() \n\n    testX = test_images.reshape((test_images.shape[0], 28, 28, 1))\n    trainX = train_images.reshape((train_images.shape[0], 28, 28, 1))\n    test_images_scaled = testX / 255.0\n    train_images_scaled = trainX / 255.0\n    test_label_ohe = to_categorical(test_labels)\n    train_label_ohe = to_categorical(train_labels)\n\n\n    file1 = open(dataset_train.path + \".npy\", \"wb\")\n    # save array to the file\n    np.save(file1, train_images_scaled)\n    # close the file\n    file1.close\n\n    file2 = open(dataset_test.path + \".npy\", \"wb\")\n    # save array to the file\n    np.save(file2, train_label_ohe)\n    # close the file\n    file2.close\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        },
+        "exec-train-model": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "train_model"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'keras' 'numpy' 'kfp==1.8.13' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef train_model(\n    dataset_x:  Input[Dataset],\n    dataset_y:  Input[Dataset],\n):\n\n    import numpy as np\n    from tensorflow.keras import layers, models\n\n    file1 = open(dataset_x.path + \".npy\", \"rb\")\n    file2 = open(dataset_y.path + \".npy\", \"rb\")\n    #read the file to numpy array\n    train_images_scaled = np.load(file1)\n    train_label_ohe = np.load(file2)\n\n    model = models.Sequential()\n    model.add(layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', input_shape=(28, 28, 1)))\n    model.add(layers.MaxPooling2D((2, 2)))\n    model.add(layers.Flatten())\n    model.add(layers.Dense(100, activation='relu', kernel_initializer='he_uniform'))\n    model.add(layers.Dense(10, activation='softmax'))\n\n    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])\n\n    model.fit(train_images_scaled, train_label_ohe, validation_split=0.15, epochs=5)\n\n"
+            ],
+            "image": "python:3.9"
+          }
+        }
+      }
+    },
+    "pipelineInfo": {
+      "name": "test"
+    },
+    "root": {
+      "dag": {
+        "tasks": {
+          "parse-data": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-parse-data"
+            },
+            "taskInfo": {
+              "name": "parse-data"
+            }
+          },
+          "train-model": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-train-model"
+            },
+            "dependentTasks": [
+              "parse-data"
+            ],
+            "inputs": {
+              "artifacts": {
+                "dataset_x": {
+                  "taskOutputArtifact": {
+                    "outputArtifactKey": "dataset_train",
+                    "producerTask": "parse-data"
+                  }
+                },
+                "dataset_y": {
+                  "taskOutputArtifact": {
+                    "outputArtifactKey": "dataset_test",
+                    "producerTask": "parse-data"
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "train-model"
+            }
+          }
+        }
+      }
+    },
+    "schemaVersion": "2.0.0",
+    "sdkVersion": "kfp-1.8.13"
+  },
+  "runtimeConfig": {
+    "gcsOutputDirectory": "gs://cgjhusker-container-bucket/pipeline_root/intro"
+  }
+}
