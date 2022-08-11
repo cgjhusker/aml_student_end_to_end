@@ -1,5 +1,13 @@
 # AzureML Basic End to End
 
+This end to end process will run through the steps of uploading, training, and deploying machine learning models to AzureML.
+
+Prerequisites:
+1) Have an AzureML account
+2) Have a completed ml model using python
+3) The python script uses the MLFlow Library
+
+Steps:
 1) Start by cloning the python files in this repository
 2) Upload the python files into the notebooks section of AzureML
 3) Create a Compute Instance in AzureML
